@@ -30,3 +30,23 @@ class ConversationStore(Protocol):
     def add(self, channel_id: int, message: ChatMessage) -> None: ...
 
     def clear(self, channel_id: int) -> None: ...
+
+
+@runtime_checkable
+class TTSProvider(Protocol):
+    """Contract for text-to-speech synthesis."""
+
+    voice: str
+
+    async def synthesize(self, text: str) -> str:
+        """Synthesize `text` into an audio file and return its path."""
+        ...
+
+
+@runtime_checkable
+class STTProvider(Protocol):
+    """Contract for speech-to-text transcription of an audio file."""
+
+    def transcribe(self, audio_path: str) -> str:
+        """Transcribe the audio at `audio_path` and return the text."""
+        ...

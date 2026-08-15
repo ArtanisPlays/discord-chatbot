@@ -23,3 +23,19 @@ def get_dev_guild_id() -> int | None:
     """The test server ID for instant command sync, or None for global sync."""
     raw = os.getenv("DEV_GUILD_ID", "").strip()
     return int(raw) if raw.isdigit() else None
+
+
+def get_tts_voice() -> str:
+    """The TTS voice used for spoken replies (default: Indonesian female)."""
+    return os.getenv("TTS_VOICE", "id-ID-GadisNeural").strip() or "id-ID-GadisNeural"
+
+
+def get_stt_model() -> str:
+    """The local faster-whisper model size used for speech-to-text."""
+    return os.getenv("STT_MODEL", "small").strip() or "small"
+
+
+def get_stt_language() -> str | None:
+    """Language hint for transcription, or None for auto-detect."""
+    raw = os.getenv("STT_LANGUAGE", "id").strip()
+    return raw or None

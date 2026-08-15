@@ -1,5 +1,5 @@
 import discord
-from discord import app_commands
+from discord import commands as discord_commands
 from discord.ext import commands
 
 
@@ -9,41 +9,42 @@ class ModelCog(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
 
-    async def _model_autocomplete(self, interaction: discord.Interaction, current: str):
+    async def _model_autocomplete(self, ctx: discord.AutocompleteContext):
         models = await self.bot.model_service.list_models()
+        current = (ctx.value or "").lower()
         choices = []
         for m in models:
             label = f"{m['name']} ({m['id']})" if m["name"] != m["id"] else m["id"]
-            if current.lower() in label.lower():
-                choices.append(app_commands.Choice(name=label, value=m["id"]))
+            if current in label.lower():
+                choices.append(discord_commands.OptionChoice(name=label, value=m["id"]))
             if len(choices) >= 25:
                 break
         return choices
 
-    model_group = app_commands.Group(name="model", description="View or change the chat model used by the bot.")
+    model_group = discord.SlashCommandGroup(name="model", description="View or change the chat model used by the bot.")
 
     @model_group.command(name="show", description="Show the chat model currently used in this server.")
-    @app_commands.guild_only()
-    async def model_show(self, interaction: discord.Interaction):
+    @discord.guild_only()
+    async def model_show(self, ctx: discord.ApplicationContext):
         embed = discord.Embed(title="Current Chat Model", color=discord.Color.blurple())
-        embed.add_field(name="Server override", value=f"`{self.bot.model_service.effective_model(interaction.guild_id)}`", inline=False)
+        embed.add_field(name="Server override", value=f"`{self.bot.model_service.effective_model(ctx.guild_id)}`", inline=False)
         embed.add_field(name="Global default", value=f"`{self.bot.model_service.provider.model}`", inline=False)
         embed.set_footer(text="Use /model list to see all available models.")
-        await interaction.response.send_message(embed=embed)
+        await ctx.respond(embed=embed)
 
     @model_group.command(name="list", description="List every model available on the chat API.")
-    @app_commands.guild_only()
-    async def model_list(self, interaction: discord.Interaction):
-        await interaction.response.defer()
+    @discord.guild_only()
+    async def model_list(self, ctx: discord.ApplicationContext):
+        await ctx.defer()
         models = await self.bot.model_service.list_models()
 
         if not models:
-            await interaction.followup.send(
+            await ctx.followup.send(
                 "Could not fetch the model list. Is `CHAT_API_URL` configured and the API reachable?"
             )
             return
 
-        current = self.bot.model_service.effective_model(interaction.guild_id)
+        current = self.bot.model_service.effective_model(ctx.guild_id)
         lines = []
         for m in models:
             if m["id"] == current:
@@ -59,45 +60,44 @@ class ModelCog(commands.Cog):
         )
         if len(text) <= 1024:
             embed.add_field(name="Models", value=text, inline=False)
-            await interaction.followup.send(embed=embed)
+            await ctx.followup.send(embed=embed)
         else:
             pages = [text[i:i + 1024] for i in range(0, len(text), 1024)]
             for i, page in enumerate(pages, start=1):
                 page_embed = discord.Embed(title=f"Models ({i}/{len(pages)})", color=discord.Color.blurple())
                 page_embed.add_field(name="Models", value=page, inline=False)
-                await interaction.followup.send(embed=page_embed)
+                await ctx.followup.send(embed=page_embed)
 
     @model_group.command(name="set", description="Set the chat model used by the bot in this server.")
-    @app_commands.describe(model="The model id to use (e.g. gpt-oss:20b)")
-    @app_commands.guild_only()
-    @app_commands.autocomplete(model=_model_autocomplete)
-    async def model_set(self, interaction: discord.Interaction, model: str):
-        await interaction.response.defer()
+    @discord.option("model", description="The model id to use (e.g. gpt-oss:20b)", autocomplete=_model_autocomplete)
+    @discord.guild_only()
+    async def model_set(self, ctx: discord.ApplicationContext, model: str):
+        await ctx.defer()
         models = await self.bot.model_service.list_models()
 
         valid_ids = {m["id"] for m in models}
         if valid_ids and model not in valid_ids:
-            await interaction.followup.send(
+            await ctx.followup.send(
                 f"`{model}` is not in the model list. Use `/model list` to see valid models.",
                 ephemeral=True,
             )
             return
 
-        self.bot.model_service.set_guild_model(interaction.guild_id, model)
+        self.bot.model_service.set_guild_model(ctx.guild_id, model)
         embed = discord.Embed(
             title="Model Updated",
             description=f"This server's chat model is now **`{model}`**.",
             color=discord.Color.green(),
         )
         embed.set_footer(text="Use /model reset to go back to the global default.")
-        await interaction.followup.send(embed=embed)
+        await ctx.followup.send(embed=embed)
 
     @model_group.command(name="reset", description="Reset this server's model back to the global default.")
-    @app_commands.guild_only()
-    async def model_reset(self, interaction: discord.Interaction):
-        override = self.bot.model_service.effective_model(interaction.guild_id) != self.bot.model_service.provider.model
+    @discord.guild_only()
+    async def model_reset(self, ctx: discord.ApplicationContext):
+        override = self.bot.model_service.effective_model(ctx.guild_id) != self.bot.model_service.provider.model
         if override:
-            self.bot.model_service.reset_guild_model(interaction.guild_id)
+            self.bot.model_service.reset_guild_model(ctx.guild_id)
             embed = discord.Embed(
                 title="Model Reset",
                 description=f"Back to the global default: **`{self.bot.model_service.provider.model}`**",
@@ -109,8 +109,8 @@ class ModelCog(commands.Cog):
                 description=f"This server already uses the global default: **`{self.bot.model_service.provider.model}`**",
                 color=discord.Color.blurple(),
             )
-        await interaction.response.send_message(embed=embed)
+        await ctx.respond(embed=embed)
 
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(ModelCog(bot))
+def setup(bot: commands.Bot):
+    bot.add_cog(ModelCog(bot))

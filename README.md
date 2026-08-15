@@ -1,6 +1,6 @@
 # 🤖 Custom Discord Chatbot Prototype
 
-A custom Discord chatbot built in Python using **`discord.py` (v2.x)** with modern slash commands (`app_commands`), interactive conversational replies on `@mentions` and direct messages (DMs), and modular cog architecture.
+A custom Discord chatbot built in Python using **py-cord (v2.x)** with modern slash commands, interactive conversational replies on `@mentions` and direct messages (DMs), modular cog architecture, and voice support (listens with speech-to-text and answers with text-to-speech).
 
 ---
 
@@ -79,6 +79,12 @@ python start.py
 | **`/model list`** | `/model list` | Lists every model available on the chat API. |
 | **`/model set`** | `/model set model:<name>` | Switches the server's chat model (with autocomplete from the API). |
 | **`/model reset`** | `/model reset` | Reverts the server's model to the global default. |
+| **`/voice join`** | `/voice join` | Bot joins your voice channel and starts listening. |
+| **`/voice listen`** | `/voice listen` | Start recording everyone in the voice channel. |
+| **`/voice stop`** | `/voice stop` | Stop listening and answer what was said (spoken + echoed in text). |
+| **`/voice say`** | `/voice say text:<msg>` | Make the bot speak a message out loud (no listening). |
+| **`/voice status`** | `/voice status` | Show channel, listening/speaking state, and members. |
+| **`/voice leave`** | `/voice leave` | Bot leaves the voice channel. |
 
 Prefix commands also work: **`!help`** and **`!chat <message>`**.
 
@@ -87,6 +93,18 @@ Prefix commands also work: **`!help`** and **`!chat <message>`**.
 Model selection is per-server (each Discord server can pick its own model). The choice is kept in memory and resets to the global default (`CHAT_API_MODEL`) whenever the bot restarts.
 
 The bot **remembers the conversation per channel** (mentions, DMs, and `/chat` all share the same memory), so you can have a real back-and-forth: it keeps the last `CHAT_HISTORY_MESSAGES` turns (default 20) and forgets everything after `CHAT_HISTORY_TTL` seconds of inactivity (default 1800s / 30 min). Use `/clear` to reset a conversation manually.
+
+### 🎙️ Voice (listening + speaking)
+
+The bot can talk **and** listen in voice channels, all with free, no-API-key services:
+
+- **TTS (speaking)** — `edge-tts` uses Microsoft Edge's free online voices. Default voice `id-ID-GadisNeural` (Indonesian female). Audio is cached on disk so repeated messages don't re-synthesize.
+- **STT (listening)** — `faster-whisper` runs Whisper locally (offline). The model (default `small`, ~460 MB) downloads once on first use. Indonesian language hint is set by default.
+- **ffmpeg** — required to decode TTS MP3 into the PCM stream Discord accepts. Install with `winget install ffmpeg`.
+
+**Flow:** `/voice join` → the bot listens → ask your question out loud → `/voice stop` → the bot transcribes it, sends it through the same chat pipeline (with conversation memory), then plays the answer and echoes the exchange in text.
+
+> **Known limitation:** py-cord's voice *receiving* (listening) can fail on some servers because of Discord's DAVE end-to-end encryption rollout. If recordings come back garbled or empty, `/voice say` (speaking only) still works — the bot just won't be able to hear you. Set `STT_MODEL` to `base` for a smaller/faster model, or `medium` for better accuracy.
 
 ---
 
@@ -100,31 +118,36 @@ Chatbot/
 ├── main.py                # Entry point: logging, token check, starts the bot
 ├── start.py               # Run the bot (same as main.py)
 ├── update.py              # Register/sync slash command changes, then exit
-├── requirements.txt       # Python dependencies (discord.py, python-dotenv, aiohttp)
+├── requirements.txt       # Python dependencies (py-cord, edge-tts, faster-whisper, ...)
 ├── README.md              # Setup and usage documentation
 │
 ├── domain/                # Domain layer: pure business objects & contracts (no deps)
 │   ├── models.py          # ChatMessage, Conversation
-│   └── ports.py           # LLMProvider, ConversationStore (Protocols)
+│   └── ports.py           # LLMProvider, ConversationStore, TTSProvider, STTProvider
 ├── application/           # Application layer: use cases / services
 │   ├── chat_service.py    # ChatService: one turn + conversation memory
-│   └── model_service.py   # ModelService: model list cache + per-guild overrides
+│   ├── model_service.py   # ModelService: model list cache + per-guild overrides
+│   └── voice_service.py   # VoiceService: STT → chat → TTS pipeline
 ├── infrastructure/        # Infrastructure layer: adapters & I/O
 │   ├── config.py          # Env config: logging setup, token & dev guild helpers
 │   ├── llm_client.py      # LLMClient: OpenAI-compatible chat API (SSE streaming)
-│   └── conversation_store.py  # MemoryConversationStore: in-memory per-channel memory
+│   ├── conversation_store.py  # MemoryConversationStore: in-memory per-channel memory
+│   ├── tts_client.py      # EdgeTTSClient: edge-tts synthesis + on-disk cache
+│   ├── stt_client.py      # WhisperSTTClient: local faster-whisper transcription
+│   └── voice_receiver.py  # VoiceReceiver: py-cord WaveSink recording → WAV files
 └── presentation/          # Presentation layer: Discord interface
     ├── bot.py             # create_bot (composition root), CustomBot, cog loading/sync
     ├── utils.py           # split_message (Discord 2000-char safe chunking)
     └── cogs/
         ├── chat_cog.py    # @mentions, DMs, /chat, !chat, /clear
         ├── general_cog.py # /ping, /help, /about
-        └── models_cog.py  # /model show, list, set, reset
+        ├── models_cog.py  # /model show, list, set, reset
+        └── voice_cog.py   # /voice join, listen, stop, say, status, leave
 ```
 
 ### Layered architecture
 
-Dependencies flow one way: `presentation -> application -> domain` and `infrastructure -> domain`. The presentation layer talks to the domain through application services (`ChatService`, `ModelService`), and adapters in `infrastructure` implement the `domain.ports` contracts (`LLMProvider`, `ConversationStore`), so swapping the LLM API or the memory store never touches the cogs.
+Dependencies flow one way: `presentation -> application -> domain` and `infrastructure -> domain`. The presentation layer talks to the domain through application services (`ChatService`, `ModelService`, `VoiceService`), and adapters in `infrastructure` implement the `domain.ports` contracts (`LLMProvider`, `ConversationStore`, `TTSProvider`, `STTProvider`), so swapping the LLM API, the memory store, or the voice engines never touches the cogs.
 
 ---
 

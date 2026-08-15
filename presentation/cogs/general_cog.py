@@ -1,7 +1,6 @@
 import time
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 
@@ -12,16 +11,16 @@ class GeneralCog(commands.Cog):
         self.bot = bot
         self.start_time = time.time()
 
-    @app_commands.command(name="ping", description="Check the bot latency and responsiveness.")
-    async def ping(self, interaction: discord.Interaction):
+    @discord.slash_command(name="ping", description="Check the bot latency and responsiveness.")
+    async def ping(self, ctx: discord.ApplicationContext):
         latency_ms = round(self.bot.latency * 1000)
         embed = discord.Embed(
             title="Pong!",
             description=f"Bot Latency: **{latency_ms} ms**",
             color=discord.Color.green(),
         )
-        embed.set_footer(text=f"Requested by {interaction.user.display_name}")
-        await interaction.response.send_message(embed=embed)
+        embed.set_footer(text=f"Requested by {ctx.author.display_name}")
+        await ctx.respond(embed=embed)
 
     def _help_embed(self, guild_id: int | None) -> discord.Embed:
         active_model = self.bot.model_service.effective_model(guild_id)
@@ -58,6 +57,14 @@ class GeneralCog(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name="Voice",
+            value="• `/voice join` - Join your voice channel and listen\n"
+                  "• `/voice listen` / `/voice stop` - Ask a question out loud, get a spoken answer\n"
+                  "• `/voice say text:<msg>` - Make the bot speak\n"
+                  "• `/voice status` / `/voice leave` - Check or leave",
+            inline=False,
+        )
+        embed.add_field(
             name="Currently Active",
             value=f"• Model: **`{active_model}`**\n"
                   f"• Chat API: {'connected' if self.bot.chat_service.provider.enabled else 'not configured (built-in replies disabled)'}",
@@ -66,16 +73,16 @@ class GeneralCog(commands.Cog):
         embed.set_footer(text="Tip: model settings are per-server and reset when the bot restarts.")
         return embed
 
-    @app_commands.command(name="help", description="Show a full guide to the bot: chat, commands, and model management.")
-    async def help_command(self, interaction: discord.Interaction):
-        await interaction.response.send_message(embed=self._help_embed(interaction.guild_id))
+    @discord.slash_command(name="help", description="Show a full guide to the bot: chat, commands, and model management.")
+    async def help_command(self, ctx: discord.ApplicationContext):
+        await ctx.respond(embed=self._help_embed(ctx.guild_id))
 
     @commands.command(name="help", description="Prefix version of /help.")
     async def help_prefix(self, ctx: commands.Context):
         await ctx.send(embed=self._help_embed(ctx.guild.id if ctx.guild else None))
 
-    @app_commands.command(name="about", description="Information about this bot.")
-    async def about(self, interaction: discord.Interaction):
+    @discord.slash_command(name="about", description="Information about this bot.")
+    async def about(self, ctx: discord.ApplicationContext):
         uptime_seconds = int(time.time() - self.start_time)
         hours, remainder = divmod(uptime_seconds, 3600)
         minutes, seconds = divmod(remainder, 60)
@@ -83,21 +90,21 @@ class GeneralCog(commands.Cog):
 
         embed = discord.Embed(
             title="About This Bot",
-            description="A Discord Chatbot built with Python and `discord.py`, powered by an AI chat API.",
+            description="A Discord Chatbot built with Python and `py-cord`, powered by an AI chat API.",
             color=discord.Color.blue(),
         )
         embed.add_field(name="Servers", value=str(len(self.bot.guilds)), inline=True)
         embed.add_field(name="Users", value=str(len(self.bot.users)), inline=True)
         embed.add_field(name="Uptime", value=uptime_str, inline=True)
         embed.add_field(name="Python Version", value="3.12", inline=True)
-        embed.add_field(name="discord.py", value=discord.__version__, inline=True)
-        embed.add_field(name="Active Model", value=f"`{self.bot.model_service.effective_model(interaction.guild_id)}`", inline=True)
+        embed.add_field(name="py-cord", value=discord.__version__, inline=True)
+        embed.add_field(name="Active Model", value=f"`{self.bot.model_service.effective_model(ctx.guild_id)}`", inline=True)
 
         if self.bot.user.avatar:
             embed.set_thumbnail(url=self.bot.user.avatar.url)
 
-        await interaction.response.send_message(embed=embed)
+        await ctx.respond(embed=embed)
 
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(GeneralCog(bot))
+def setup(bot: commands.Bot):
+    bot.add_cog(GeneralCog(bot))

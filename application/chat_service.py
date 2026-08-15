@@ -29,7 +29,7 @@ class ChatService:
             logger.warning("Chat API is not configured; cannot reply.")
             return None
 
-        history = [m.to_dict() for m in self.store.get(channel_id)]
+        history = list(self.store.get(channel_id))
         reply = await self.provider.generate_reply(
             content,
             user_name,

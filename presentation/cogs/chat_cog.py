@@ -2,7 +2,6 @@ import asyncio
 import logging
 
 import discord
-from discord import app_commands
 from discord.ext import commands
 
 from presentation.utils import split_message
@@ -89,22 +88,22 @@ class ChatCog(commands.Cog):
             text = text.replace(f"<@{self.bot.user.id}>", "").replace(f"<@!{self.bot.user.id}>", "")
         return text.strip()
 
-    @app_commands.command(name="chat", description="Send a message to chat with the bot.")
-    @app_commands.describe(message="The message or question you want to ask the bot")
-    async def chat_command(self, interaction: discord.Interaction, message: str):
-        await interaction.response.defer()
+    @discord.slash_command(name="chat", description="Send a message to chat with the bot.")
+    @discord.option("message", description="The message or question you want to ask the bot")
+    async def chat_command(self, ctx: discord.ApplicationContext, message: str):
+        await ctx.defer()
         await asyncio.sleep(0.5)
 
         reply = await self._chat_reply(
             message,
-            interaction.user.display_name,
-            interaction.guild_id,
-            interaction.channel_id,
+            ctx.author.display_name,
+            ctx.guild_id,
+            ctx.channel_id,
         )
         await self._reply_in_chunks(
             f"**You:** {message}\n**Bot:** {reply}",
-            lambda c: interaction.followup.send(c),
-            lambda c: interaction.followup.send(c),
+            lambda c: ctx.followup.send(c),
+            lambda c: ctx.followup.send(c),
         )
 
     @commands.command(name="chat", description="Prefix version of /chat.")
@@ -122,11 +121,11 @@ class ChatCog(commands.Cog):
             lambda c: ctx.channel.send(c),
         )
 
-    @app_commands.command(name="clear", description="Reset the bot's memory for this conversation.")
-    async def clear_command(self, interaction: discord.Interaction):
-        self.bot.chat_service.clear(interaction.channel_id)
-        await interaction.response.send_message("Conversation memory cleared. Starting fresh!")
+    @discord.slash_command(name="clear", description="Reset the bot's memory for this conversation.")
+    async def clear_command(self, ctx: discord.ApplicationContext):
+        self.bot.chat_service.clear(ctx.channel_id)
+        await ctx.respond("Conversation memory cleared. Starting fresh!")
 
 
-async def setup(bot: commands.Bot):
-    await bot.add_cog(ChatCog(bot))
+def setup(bot: commands.Bot):
+    bot.add_cog(ChatCog(bot))

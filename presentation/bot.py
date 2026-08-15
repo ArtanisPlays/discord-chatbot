@@ -6,9 +6,12 @@ from discord.ext import commands
 
 from application.chat_service import ChatService
 from application.model_service import ModelService
+from application.voice_service import VoiceService
 from infrastructure.config import get_dev_guild_id
 from infrastructure.conversation_store import MemoryConversationStore
 from infrastructure.llm_client import LLMClient
+from infrastructure.stt_client import WhisperSTTClient
+from infrastructure.tts_client import EdgeTTSClient
 
 logger = logging.getLogger("DiscordBot")
 
@@ -21,7 +24,7 @@ async def load_cogs(bot: commands.Bot) -> None:
             if filename.endswith(".py") and not filename.startswith("__"):
                 cog_name = f"presentation.cogs.{filename[:-3]}"
                 try:
-                    await bot.load_extension(cog_name)
+                    bot.load_extension(cog_name)
                     logger.info(f"Loaded cog extension: {cog_name}")
                 except Exception as e:
                     logger.error(f"Failed to load cog extension {cog_name}: {e}", exc_info=True)
@@ -31,12 +34,11 @@ async def sync_commands(bot: commands.Bot) -> None:
     """Register slash commands with Discord (dev-guild scoped or global)."""
     dev_guild_id = get_dev_guild_id()
     if dev_guild_id:
-        guild = discord.Object(id=dev_guild_id)
-        synced = await bot.tree.sync(guild=guild)
-        logger.info(f"Registered {len(synced)} slash command(s) for dev guild {dev_guild_id}.")
+        await bot.sync_commands(guild_ids=[dev_guild_id])
+        logger.info(f"Registered slash commands for dev guild {dev_guild_id}.")
     else:
-        synced = await bot.tree.sync()
-        logger.info(f"Registered {len(synced)} slash command(s) globally.")
+        await bot.sync_commands()
+        logger.info("Registered slash commands globally.")
 
 
 def create_bot(*, auto_sync: bool = True) -> "CustomBot":
@@ -45,10 +47,12 @@ def create_bot(*, auto_sync: bool = True) -> "CustomBot":
     store = MemoryConversationStore()
     model_service = ModelService(llm)
     chat_service = ChatService(llm, store)
+    voice_service = VoiceService(chat_service, WhisperSTTClient(), EdgeTTSClient())
     return CustomBot(
         llm=llm,
         model_service=model_service,
         chat_service=chat_service,
+        voice_service=voice_service,
         auto_sync=auto_sync,
     )
 
@@ -62,6 +66,7 @@ class CustomBot(commands.Bot):
         llm: LLMClient,
         model_service: ModelService,
         chat_service: ChatService,
+        voice_service: VoiceService,
         auto_sync: bool = True,
     ):
         super().__init__(
@@ -73,6 +78,7 @@ class CustomBot(commands.Bot):
         self.llm = llm
         self.model_service = model_service
         self.chat_service = chat_service
+        self.voice_service = voice_service
 
     @staticmethod
     def _default_intents() -> discord.Intents:
