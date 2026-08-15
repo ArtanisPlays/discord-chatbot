@@ -2,84 +2,38 @@ import os
 import sys
 import asyncio
 import logging
+
 import discord
-from discord.ext import commands
 from dotenv import load_dotenv
 
-# Load environment variables from .env
+from bot import CustomBot
+
 load_dotenv()
 
-# Setup logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
 logger = logging.getLogger("DiscordBot")
 
-# Configure bot intents
-intents = discord.Intents.default()
-intents.message_content = True  # Required to read message content for @mentions and chatting
 
-class CustomBot(commands.Bot):
-    def __init__(self):
-        super().__init__(
-            command_prefix=os.getenv("BOT_PREFIX", "!"),
-            intents=intents,
-            help_command=None  # We use custom /help slash command
-        )
-
-    async def setup_hook(self):
-        """Loads all cogs from the cogs directory before the bot connects."""
-        cogs_dir = os.path.join(os.path.dirname(__file__), "cogs")
-        if os.path.exists(cogs_dir):
-            for filename in os.listdir(cogs_dir):
-                if filename.endswith(".py") and not filename.startswith("__"):
-                    cog_name = f"cogs.{filename[:-3]}"
-                    try:
-                        await self.load_extension(cog_name)
-                        logger.info(f"Loaded cog extension: {cog_name}")
-                    except Exception as e:
-                        logger.error(f"Failed to load cog extension {cog_name}: {e}", exc_info=True)
-
-        # Sync application slash commands with Discord
-        try:
-            logger.info("Syncing slash commands...")
-            synced = await self.tree.sync()
-            logger.info(f"Successfully synced {len(synced)} slash command(s) globally.")
-        except Exception as e:
-            logger.error(f"Error syncing slash commands: {e}", exc_info=True)
-
-    async def on_ready(self):
-        """Triggered when the bot is connected and ready."""
-        logger.info(f"🤖 Logged in as: {self.user.name} (ID: {self.user.id})")
-        logger.info(f"🌐 Connected to {len(self.guilds)} guild(s)")
-        
-        # Set a rich custom activity status
-        activity = discord.Activity(
-            type=discord.ActivityType.listening,
-            name="@ me to chat! | /help"
-        )
-        await self.change_presence(activity=activity, status=discord.Status.online)
-
-    async def on_command_error(self, ctx: commands.Context, error: commands.CommandError):
-        """Global error handler for prefix commands."""
-        if isinstance(error, commands.CommandNotFound):
-            return
-        logger.error(f"Command error in '{ctx.command}': {error}")
-        await ctx.send(f"⚠️ Error: `{error}`")
+def setup_logging() -> None:
+    logging.basicConfig(
+        level=logging.INFO,
+        format="[%(asctime)s] [%(levelname)s] %(name)s: %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
 
 
-async def main():
-    token = os.getenv("DISCORD_TOKEN")
-    if not token or token.strip() == "your_bot_token_here":
+def get_token() -> str:
+    token = os.getenv("DISCORD_TOKEN", "").strip()
+    if not token or token == "your_bot_token_here":
         logger.error("DISCORD_TOKEN is missing or not set in .env file.")
         sys.exit(1)
+    return token
 
+
+async def run() -> None:
     bot = CustomBot()
     try:
         async with bot:
-            await bot.start(token)
+            await bot.start(get_token())
     except discord.errors.PrivilegedIntentsRequired:
         logger.error(
             "\n"
@@ -101,8 +55,8 @@ async def main():
 
 
 if __name__ == "__main__":
+    setup_logging()
     try:
-        asyncio.run(main())
+        asyncio.run(run())
     except KeyboardInterrupt:
         logger.info("Bot shutting down gracefully...")
-
