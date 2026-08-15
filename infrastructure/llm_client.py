@@ -4,10 +4,13 @@ import json
 import logging
 import aiohttp
 
+from domain.models import ChatMessage
+from domain.ports import LLMProvider
+
 logger = logging.getLogger("LLMClient")
 
 
-class LLMClient:
+class LLMClient(LLMProvider):
     """Async client for OpenAI-compatible chat completion endpoints.
 
     Works with OpenAI, OpenRouter, Groq, Together, Gemini (OpenAI-compat mode),
@@ -22,16 +25,22 @@ class LLMClient:
         self.model = os.getenv("CHAT_API_MODEL", "").strip() or "gpt-4o-mini"
         self.system_prompt = os.getenv(
             "CHAT_API_SYSTEM_PROMPT",
-            "You are a friendly Discord chatbot. Keep replies concise, "
-            "conversational, and in the same language the user uses.",
+            "Kamu adalah Garappizza, AI yang santai, ramah, dan asyik buat diajak ngobrol. "
+            "Namamu adalah Garappizza. Jika ditanya \"who are you?\", \"siapa kamu?\", atau seputar identitasmu, "
+            "selalu jawab dan perkenalkan dirimu sebagai Garappizza. Selalu gunakan bahasa yang sama dengan user. "
+            "Jawab dengan gaya santai, natural, dan hangat seperti ngobrol sama teman. Tetap ringkas dan nggak bertele-tele.",
         )
         try:
-            self.timeout = int(os.getenv("CHAT_API_TIMEOUT", "30"))
+            # Max idle time between streamed chunks (not a total request cap).
+            # As long as data keeps arriving, the request may run as long as
+            # the model needs to think, so slow responses are not cut off.
+            self.timeout = int(os.getenv("CHAT_API_TIMEOUT", "120"))
         except ValueError:
-            self.timeout = 30
+            self.timeout = 120
         self.enabled = bool(self.endpoint)
 
-    async def generate_reply(self, user_message: str, user_name: str, history: list = None,
+    async def generate_reply(self, user_message: str, user_name: str,
+                             history: list[ChatMessage] | None = None,
                              model: str | None = None) -> str | None:
         """Send a chat completion request and return the reply text.
 
@@ -45,7 +54,7 @@ class LLMClient:
         if user_name:
             messages[0]["content"] += f"\nYou are chatting with a user named {user_name}."
         if history:
-            messages.extend(history)
+            messages.extend(m.to_dict() if hasattr(m, "to_dict") else m for m in history)
         messages.append({"role": "user", "content": user_message})
 
         payload = {
@@ -60,7 +69,13 @@ class LLMClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        timeout = aiohttp.ClientTimeout(total=self.timeout)
+        # No overall cap (streaming may take a long time); fail fast on connect
+        # problems, and cancel only if the API goes silent for `timeout` seconds.
+        timeout = aiohttp.ClientTimeout(
+            total=None,
+            sock_connect=15,
+            sock_read=self.timeout,
+        )
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(self.endpoint, json=payload, headers=headers) as resp:
@@ -73,7 +88,7 @@ class LLMClient:
                         return await self._consume_stream(resp)
                     data = await resp.json()
         except asyncio.TimeoutError:
-            logger.error(f"Chat API timed out after {self.timeout}s")
+            logger.error(f"Chat API sent no data for {self.timeout}s; gave up waiting")
             return None
         except aiohttp.ClientError as e:
             logger.error(f"Chat API request failed: {e}")
