@@ -33,18 +33,34 @@ To invite your bot with the required permissions and slash command access, use t
 Dependencies have already been installed. To start the bot:
 
 ```powershell
-python main.py
+python start.py
 ```
+
+> Alternatively `python main.py` does the same thing. Use `python update.py` after changing slash commands to re-register them with Discord instantly (see below).
 
 You should see:
 ```text
 [INFO] DiscordBot: Loaded cog extension: cogs.general
 [INFO] DiscordBot: Loaded cog extension: cogs.chat
-[INFO] DiscordBot: Syncing slash commands...
-[INFO] DiscordBot: Successfully synced 4 slash command(s) globally.
-[INFO] DiscordBot: 🤖 Logged in as: YourBotName (ID: ...)
-[INFO] DiscordBot: 🌐 Connected to X guild(s)
+[INFO] DiscordBot: Loaded cog extension: cogs.models
+[INFO] DiscordBot: Registered N slash command(s) for dev guild ...
+[INFO] DiscordBot: Logged in as: YourBotName (ID: ...)
+[INFO] DiscordBot: Connected to X guild(s)
 ```
+
+---
+
+## 🔄 Updating Slash Commands
+
+After changing, adding, or removing slash commands, register them without running the bot:
+
+```powershell
+python update.py
+python start.py
+```
+
+- `update.py` — logs in, loads cogs, and syncs the command tree (instant to `DEV_GUILD_ID` if set, otherwise global), then exits.
+- `start.py` — runs the bot normally.
 
 ---
 
@@ -55,6 +71,7 @@ You should see:
 | **@Mention Chat** | `@BotName Hello!` | Replies with AI-generated responses (using the configured chat API). |
 | **DM Chat** | Direct Message | Send a private message directly to the bot anytime. |
 | **`/chat`** | `/chat message:How's the weather?` | Slash command interface for chatting with the bot. |
+| **`/clear`** | `/clear` | Resets the bot's memory for this conversation (starts a fresh topic). |
 | **`/ping`** | `/ping` | Displays current bot latency (in milliseconds). |
 | **`/about`** | `/about` | Displays system status, uptime, server count, library versions, and active model. |
 | **`/help`** | `/help` | Shows a full guide: how to chat, all commands, and model management. |
@@ -63,7 +80,13 @@ You should see:
 | **`/model set`** | `/model set model:<name>` | Switches the server's chat model (with autocomplete from the API). |
 | **`/model reset`** | `/model reset` | Reverts the server's model to the global default. |
 
+Prefix commands also work: **`!help`** and **`!chat <message>`**.
+
+> **Tip (dev):** set `DEV_GUILD_ID` to your test server's ID to sync slash commands *instantly* to that server. Without it, commands sync globally, which can take up to ~1 hour to propagate (this is what causes Discord's "This command is outdated, please try again in a few minutes" message right after an update — restarting the Discord client also fixes it).
+
 Model selection is per-server (each Discord server can pick its own model). The choice is kept in memory and resets to the global default (`CHAT_API_MODEL`) whenever the bot restarts.
+
+The bot **remembers the conversation per channel** (mentions, DMs, and `/chat` all share the same memory), so you can have a real back-and-forth: it keeps the last `CHAT_HISTORY_MESSAGES` turns (default 20) and forgets everything after `CHAT_HISTORY_TTL` seconds of inactivity (default 1800s / 30 min). Use `/clear` to reset a conversation manually.
 
 ---
 
@@ -75,6 +98,9 @@ Chatbot/
 ├── .env.example           # Template for environment variables
 ├── .gitignore             # Keeps secrets and cache out of version control
 ├── main.py                # Entry point: logging, token check, starts the bot
+├── start.py               # Run the bot (same as main.py)
+├── update.py              # Register/sync slash command changes, then exit
+├── config.py              # Shared config: logging setup, token & dev guild helpers
 ├── bot.py                 # CustomBot: intents, shared LLM client, guild model state
 ├── requirements.txt       # Python dependencies (discord.py, python-dotenv, aiohttp)
 ├── README.md              # Setup and usage documentation
@@ -96,7 +122,9 @@ CHAT_API_URL=https://api.openai.com/v1/chat/completions   # your endpoint
 CHAT_API_KEY=sk-xxxx                                      # leave empty for local servers
 CHAT_API_MODEL=gpt-4o-mini                                # model name
 CHAT_API_SYSTEM_PROMPT=You are a friendly Discord chatbot.
-CHAT_API_TIMEOUT=30                                       # seconds
+CHAT_API_TIMEOUT=120                                      # max idle (no-data) seconds before cancelling; slow streams are allowed
+CHAT_HISTORY_MESSAGES=20                                  # turns of memory kept per channel
+CHAT_HISTORY_TTL=1800                                     # idle seconds before memory resets
 ```
 
 - The bot needs a configured API to reply. If `CHAT_API_URL` is empty or a request fails, the bot replies with a short error message instead of crashing.
@@ -115,6 +143,8 @@ CHAT_API_MODEL=gpt-oss:20b
 ```
 
 The client sends `"stream": true` and consumes the Server-Sent Events response, skipping reasoning/thinking chunks (`delta.reasoning_content`) and keeping only the final answer text (`delta.content`).
+
+Slow responses are **not** cancelled: there is no overall request timeout. The request only gives up if the API goes silent for `CHAT_API_TIMEOUT` seconds (default 120s) — so a model that takes a while to "think" before streaming works fine.
 
 Example with Gemini via OpenAI-compatible endpoint:
 ```env

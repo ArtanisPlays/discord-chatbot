@@ -26,9 +26,12 @@ class LLMClient:
             "conversational, and in the same language the user uses.",
         )
         try:
-            self.timeout = int(os.getenv("CHAT_API_TIMEOUT", "30"))
+            # Max idle time between streamed chunks (not a total request cap).
+            # As long as data keeps arriving, the request may run as long as
+            # the model needs to think, so slow responses are not cut off.
+            self.timeout = int(os.getenv("CHAT_API_TIMEOUT", "120"))
         except ValueError:
-            self.timeout = 30
+            self.timeout = 120
         self.enabled = bool(self.endpoint)
 
     async def generate_reply(self, user_message: str, user_name: str, history: list = None,
@@ -60,7 +63,13 @@ class LLMClient:
         if self.api_key:
             headers["Authorization"] = f"Bearer {self.api_key}"
 
-        timeout = aiohttp.ClientTimeout(total=self.timeout)
+        # No overall cap (streaming may take a long time); fail fast on connect
+        # problems, and cancel only if the API goes silent for `timeout` seconds.
+        timeout = aiohttp.ClientTimeout(
+            total=None,
+            sock_connect=15,
+            sock_read=self.timeout,
+        )
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
                 async with session.post(self.endpoint, json=payload, headers=headers) as resp:
@@ -73,7 +82,7 @@ class LLMClient:
                         return await self._consume_stream(resp)
                     data = await resp.json()
         except asyncio.TimeoutError:
-            logger.error(f"Chat API timed out after {self.timeout}s")
+            logger.error(f"Chat API sent no data for {self.timeout}s; gave up waiting")
             return None
         except aiohttp.ClientError as e:
             logger.error(f"Chat API request failed: {e}")
