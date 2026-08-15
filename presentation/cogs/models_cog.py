@@ -15,7 +15,7 @@ class ModelCog(commands.Cog):
         choices = []
         for m in models:
             label = f"{m['name']} ({m['id']})" if m["name"] != m["id"] else m["id"]
-            if current in label.lower():
+            if current in label.lower() or current in m["id"].lower():
                 choices.append(discord_commands.OptionChoice(name=label, value=m["id"]))
             if len(choices) >= 25:
                 break

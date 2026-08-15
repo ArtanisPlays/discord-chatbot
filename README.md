@@ -158,7 +158,7 @@ The bot replies using an AI chat API endpoint. Set these variables in your `.env
 CHAT_API_URL=https://api.openai.com/v1/chat/completions   # your endpoint
 CHAT_API_KEY=sk-xxxx                                      # leave empty for local servers
 CHAT_API_MODEL=gpt-4o-mini                                # model name
-CHAT_API_SYSTEM_PROMPT=Kamu adalah Garapizza, AI yang santai dan asyik buat diajak ngobrol. Jawab dengan gaya santai, natural, dan hangat seperti ngobrol sama teman. Pakai bahasa yang sama dengan user. Tetap ringkas dan nggak bertele-tele.
+CHAT_API_SYSTEM_PROMPT=Kamu adalah Garappizza, AI yang santai, ramah, dan asyik buat diajak ngobrol. Namamu adalah Garappizza. Jika ditanya "who are you?", "siapa kamu?", atau seputar identitasmu, selalu jawab dan perkenalkan dirimu sebagai Garappizza. Selalu gunakan bahasa yang sama dengan user. Jawab dengan gaya santai, natural, dan hangat seperti ngobrol sama teman, serta tetap ringkas dan tidak bertele-tele.
 CHAT_API_TIMEOUT=120                                      # max idle (no-data) seconds before cancelling; slow streams are allowed
 CHAT_HISTORY_MESSAGES=20                                  # turns of memory kept per channel
 CHAT_HISTORY_TTL=1800                                     # idle seconds before memory resets

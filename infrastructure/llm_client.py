@@ -25,9 +25,10 @@ class LLMClient(LLMProvider):
         self.model = os.getenv("CHAT_API_MODEL", "").strip() or "gpt-4o-mini"
         self.system_prompt = os.getenv(
             "CHAT_API_SYSTEM_PROMPT",
-            "Kamu adalah Garapizza, AI yang santai dan asyik buat diajak ngobrol. "
-            "Jawab dengan gaya santai, natural, dan hangat seperti ngobrol sama teman. "
-            "Pakai bahasa yang sama dengan user. Tetap ringkas dan nggak bertele-tele.",
+            "Kamu adalah Garappizza, AI yang santai, ramah, dan asyik buat diajak ngobrol. "
+            "Namamu adalah Garappizza. Jika ditanya \"who are you?\", \"siapa kamu?\", atau seputar identitasmu, "
+            "selalu jawab dan perkenalkan dirimu sebagai Garappizza. Selalu gunakan bahasa yang sama dengan user. "
+            "Jawab dengan gaya santai, natural, dan hangat seperti ngobrol sama teman. Tetap ringkas dan nggak bertele-tele.",
         )
         try:
             # Max idle time between streamed chunks (not a total request cap).
@@ -53,7 +54,7 @@ class LLMClient(LLMProvider):
         if user_name:
             messages[0]["content"] += f"\nYou are chatting with a user named {user_name}."
         if history:
-            messages.extend(m.to_dict() for m in history)
+            messages.extend(m.to_dict() if hasattr(m, "to_dict") else m for m in history)
         messages.append({"role": "user", "content": user_message})
 
         payload = {
