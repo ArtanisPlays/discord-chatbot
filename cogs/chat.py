@@ -5,6 +5,8 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
+from utils import split_message
+
 logger = logging.getLogger("ChatCog")
 
 # Messages shown when the chat API is unavailable (not a chat reply).
@@ -42,6 +44,16 @@ class ChatCog(commands.Cog):
         self.bot.add_to_history(channel_id, "assistant", reply)
         return reply
 
+    @staticmethod
+    async def _reply_in_chunks(text: str, send_first, send_rest) -> None:
+        """Send a reply split into Discord-safe chunks (<2000 chars)."""
+        chunks = split_message(text)
+        if not chunks:
+            return
+        await send_first(chunks[0])
+        for chunk in chunks[1:]:
+            await send_rest(chunk)
+
     def _is_command(self, message: discord.Message) -> bool:
         """True if the message starts with the bot's prefix (a command, not chat)."""
         prefix = self.bot.command_prefix
@@ -73,7 +85,11 @@ class ChatCog(commands.Cog):
                 message.channel.id,
             )
 
-        await message.reply(reply, mention_author=False)
+        await self._reply_in_chunks(
+            reply,
+            lambda c: message.reply(c, mention_author=False),
+            lambda c: message.channel.send(c),
+        )
 
     def _clean_mentions(self, text: str) -> str:
         """Strip the bot's own <@id> / <@!id> mentions from a message."""
@@ -93,7 +109,11 @@ class ChatCog(commands.Cog):
             interaction.guild_id,
             interaction.channel_id,
         )
-        await interaction.followup.send(f"**You:** {message}\n**Bot:** {reply}")
+        await self._reply_in_chunks(
+            f"**You:** {message}\n**Bot:** {reply}",
+            lambda c: interaction.followup.send(c),
+            lambda c: interaction.followup.send(c),
+        )
 
     @commands.command(name="chat", description="Prefix version of /chat.")
     async def chat_prefix(self, ctx: commands.Context, *, message: str):
@@ -104,7 +124,11 @@ class ChatCog(commands.Cog):
                 ctx.guild.id if ctx.guild else None,
                 ctx.channel.id,
             )
-        await ctx.reply(f"**You:** {message}\n**Bot:** {reply}")
+        await self._reply_in_chunks(
+            reply,
+            lambda c: ctx.reply(c),
+            lambda c: ctx.channel.send(c),
+        )
 
     @app_commands.command(name="clear", description="Reset the bot's memory for this conversation.")
     async def clear_command(self, interaction: discord.Interaction):

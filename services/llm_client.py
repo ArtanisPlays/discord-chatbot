@@ -22,8 +22,9 @@ class LLMClient:
         self.model = os.getenv("CHAT_API_MODEL", "").strip() or "gpt-4o-mini"
         self.system_prompt = os.getenv(
             "CHAT_API_SYSTEM_PROMPT",
-            "You are a friendly Discord chatbot. Keep replies concise, "
-            "conversational, and in the same language the user uses.",
+            "Kamu adalah Garapizza, AI yang santai dan asyik buat diajak ngobrol. "
+            "Jawab dengan gaya santai, natural, dan hangat seperti ngobrol sama teman. "
+            "Pakai bahasa yang sama dengan user. Tetap ringkas dan nggak bertele-tele.",
         )
         try:
             # Max idle time between streamed chunks (not a total request cap).

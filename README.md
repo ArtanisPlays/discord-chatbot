@@ -121,7 +121,7 @@ The bot replies using an AI chat API endpoint. Set these variables in your `.env
 CHAT_API_URL=https://api.openai.com/v1/chat/completions   # your endpoint
 CHAT_API_KEY=sk-xxxx                                      # leave empty for local servers
 CHAT_API_MODEL=gpt-4o-mini                                # model name
-CHAT_API_SYSTEM_PROMPT=You are a friendly Discord chatbot.
+CHAT_API_SYSTEM_PROMPT=Kamu adalah Garapizza, AI yang santai dan asyik buat diajak ngobrol. Jawab dengan gaya santai, natural, dan hangat seperti ngobrol sama teman. Pakai bahasa yang sama dengan user. Tetap ringkas dan nggak bertele-tele.
 CHAT_API_TIMEOUT=120                                      # max idle (no-data) seconds before cancelling; slow streams are allowed
 CHAT_HISTORY_MESSAGES=20                                  # turns of memory kept per channel
 CHAT_HISTORY_TTL=1800                                     # idle seconds before memory resets
@@ -145,6 +145,8 @@ CHAT_API_MODEL=gpt-oss:20b
 The client sends `"stream": true` and consumes the Server-Sent Events response, skipping reasoning/thinking chunks (`delta.reasoning_content`) and keeping only the final answer text (`delta.content`).
 
 Slow responses are **not** cancelled: there is no overall request timeout. The request only gives up if the API goes silent for `CHAT_API_TIMEOUT` seconds (default 120s) — so a model that takes a while to "think" before streaming works fine.
+
+Long replies are automatically split into multiple Discord-safe messages (max ~2000 chars each), breaking at paragraphs/lines/sentences and keeping markdown code blocks intact across chunks.
 
 Example with Gemini via OpenAI-compatible endpoint:
 ```env
