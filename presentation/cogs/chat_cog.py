@@ -5,7 +5,7 @@ import discord
 from discord import app_commands
 from discord.ext import commands
 
-from utils import split_message
+from presentation.utils import split_message
 
 logger = logging.getLogger("ChatCog")
 
@@ -17,7 +17,7 @@ API_ERROR = "I couldn't reach my AI brain just now. Please try again in a moment
 
 
 class ChatCog(commands.Cog):
-    """Handles chat: @mentions, DMs, and the /chat slash command."""
+    """Presentation: chat via @mentions, DMs, and the /chat & !chat commands."""
 
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -25,23 +25,15 @@ class ChatCog(commands.Cog):
     async def _chat_reply(self, content: str, user_name: str, guild_id: int | None,
                           channel_id: int) -> str:
         """Generate a reply with conversation memory (falls back to an error message)."""
-        if not self.bot.llm.enabled:
-            logger.warning("Chat API is not configured; cannot reply.")
-            return NO_API_CONFIGURED
-
-        history = self.bot.get_history(channel_id)
-        reply = await self.bot.llm.generate_reply(
+        reply = await self.bot.chat_service.chat(
             content,
             user_name,
-            history=history,
-            model=self.bot.effective_model(guild_id),
+            channel_id,
+            model=self.bot.model_service.effective_model(guild_id),
         )
-        if not reply:
+        if reply is None:
             logger.error("Chat API returned no reply.")
-            return API_ERROR
-
-        self.bot.add_to_history(channel_id, "user", content)
-        self.bot.add_to_history(channel_id, "assistant", reply)
+            return API_ERROR if self.bot.chat_service.provider.enabled else NO_API_CONFIGURED
         return reply
 
     @staticmethod
@@ -132,10 +124,9 @@ class ChatCog(commands.Cog):
 
     @app_commands.command(name="clear", description="Reset the bot's memory for this conversation.")
     async def clear_command(self, interaction: discord.Interaction):
-        self.bot.clear_history(interaction.channel_id)
+        self.bot.chat_service.clear(interaction.channel_id)
         await interaction.response.send_message("Conversation memory cleared. Starting fresh!")
 
 
 async def setup(bot: commands.Bot):
     await bot.add_cog(ChatCog(bot))
-

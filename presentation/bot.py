@@ -1,27 +1,25 @@
 import os
-import time
 import logging
 
 import discord
 from discord.ext import commands
 
-from config import get_dev_guild_id
-from services.llm_client import LLMClient
+from application.chat_service import ChatService
+from application.model_service import ModelService
+from infrastructure.config import get_dev_guild_id
+from infrastructure.conversation_store import MemoryConversationStore
+from infrastructure.llm_client import LLMClient
 
 logger = logging.getLogger("DiscordBot")
 
-# Conversation memory settings (can be tuned via .env).
-HISTORY_MAX_MESSAGES = int(os.getenv("CHAT_HISTORY_MESSAGES", "20"))
-HISTORY_TTL_SECONDS = int(os.getenv("CHAT_HISTORY_TTL", "1800"))  # idle reset
-
 
 async def load_cogs(bot: commands.Bot) -> None:
-    """Load every cog from the cogs directory."""
+    """Load every cog from the presentation/cogs directory."""
     cogs_dir = os.path.join(os.path.dirname(__file__), "cogs")
     if os.path.exists(cogs_dir):
         for filename in os.listdir(cogs_dir):
             if filename.endswith(".py") and not filename.startswith("__"):
-                cog_name = f"cogs.{filename[:-3]}"
+                cog_name = f"presentation.cogs.{filename[:-3]}"
                 try:
                     await bot.load_extension(cog_name)
                     logger.info(f"Loaded cog extension: {cog_name}")
@@ -41,62 +39,46 @@ async def sync_commands(bot: commands.Bot) -> None:
         logger.info(f"Registered {len(synced)} slash command(s) globally.")
 
 
-class CustomBot(commands.Bot):
-    """Central bot class: holds shared services and cross-guild state."""
+def create_bot(*, auto_sync: bool = True) -> "CustomBot":
+    """Composition root: wire the infrastructure and application layers together."""
+    llm = LLMClient()
+    store = MemoryConversationStore()
+    model_service = ModelService(llm)
+    chat_service = ChatService(llm, store)
+    return CustomBot(
+        llm=llm,
+        model_service=model_service,
+        chat_service=chat_service,
+        auto_sync=auto_sync,
+    )
 
-    def __init__(self, auto_sync: bool = True):
+
+class CustomBot(commands.Bot):
+    """Presentation entry point: owns Discord wiring and injected services."""
+
+    def __init__(
+        self,
+        *,
+        llm: LLMClient,
+        model_service: ModelService,
+        chat_service: ChatService,
+        auto_sync: bool = True,
+    ):
         super().__init__(
             command_prefix=os.getenv("BOT_PREFIX", "!"),
             intents=self._default_intents(),
             help_command=None,  # custom /help slash command
         )
         self._auto_sync = auto_sync
-        # Shared chat API client, used by all cogs.
-        self.llm = LLMClient()
-        # Per-guild model override: {guild_id: model_id}
-        self.guild_models: dict[int, str] = {}
-        # Per-channel conversation memory:
-        #   {channel_id: {"messages": [{"role", "content"}, ...], "ts": last_activity}}
-        self.conversations: dict[int, dict] = {}
+        self.llm = llm
+        self.model_service = model_service
+        self.chat_service = chat_service
 
     @staticmethod
     def _default_intents() -> discord.Intents:
         intents = discord.Intents.default()
         intents.message_content = True  # required to read message content
         return intents
-
-    def effective_model(self, guild_id: int | None) -> str:
-        """The model active in a guild, or the global default."""
-        if guild_id and guild_id in self.guild_models:
-            return self.guild_models[guild_id]
-        return self.llm.model
-
-    def set_guild_model(self, guild_id: int, model: str) -> None:
-        self.guild_models[guild_id] = model
-
-    def reset_guild_model(self, guild_id: int) -> None:
-        self.guild_models.pop(guild_id, None)
-
-    def get_history(self, channel_id: int) -> list[dict]:
-        """Prior turns for a channel, or [] if the conversation is stale/empty."""
-        conv = self.conversations.get(channel_id)
-        if not conv:
-            return []
-        if time.time() - conv["ts"] > HISTORY_TTL_SECONDS:
-            self.conversations.pop(channel_id, None)
-            return []
-        return conv["messages"]
-
-    def add_to_history(self, channel_id: int, role: str, content: str) -> None:
-        """Remember one turn of a channel's conversation (trimmed to a max size)."""
-        conv = self.conversations.setdefault(channel_id, {"messages": [], "ts": time.time()})
-        conv["messages"].append({"role": role, "content": content})
-        conv["ts"] = time.time()
-        if len(conv["messages"]) > HISTORY_MAX_MESSAGES:
-            del conv["messages"][: len(conv["messages"]) - HISTORY_MAX_MESSAGES]
-
-    def clear_history(self, channel_id: int) -> None:
-        self.conversations.pop(channel_id, None)
 
     async def setup_hook(self):
         """Load all cogs from the cogs directory before connecting."""

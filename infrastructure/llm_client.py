@@ -4,10 +4,13 @@ import json
 import logging
 import aiohttp
 
+from domain.models import ChatMessage
+from domain.ports import LLMProvider
+
 logger = logging.getLogger("LLMClient")
 
 
-class LLMClient:
+class LLMClient(LLMProvider):
     """Async client for OpenAI-compatible chat completion endpoints.
 
     Works with OpenAI, OpenRouter, Groq, Together, Gemini (OpenAI-compat mode),
@@ -35,7 +38,8 @@ class LLMClient:
             self.timeout = 120
         self.enabled = bool(self.endpoint)
 
-    async def generate_reply(self, user_message: str, user_name: str, history: list = None,
+    async def generate_reply(self, user_message: str, user_name: str,
+                             history: list[ChatMessage] | None = None,
                              model: str | None = None) -> str | None:
         """Send a chat completion request and return the reply text.
 
@@ -49,7 +53,7 @@ class LLMClient:
         if user_name:
             messages[0]["content"] += f"\nYou are chatting with a user named {user_name}."
         if history:
-            messages.extend(history)
+            messages.extend(m.to_dict() for m in history)
         messages.append({"role": "user", "content": user_message})
 
         payload = {

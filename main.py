@@ -5,8 +5,8 @@ import logging
 import discord
 from dotenv import load_dotenv
 
-from bot import CustomBot
-from config import get_discord_token, setup_logging
+from infrastructure.config import get_discord_token, setup_logging
+from presentation.bot import create_bot
 
 load_dotenv()
 
@@ -14,7 +14,7 @@ logger = logging.getLogger("DiscordBot")
 
 
 async def run() -> None:
-    bot = CustomBot()
+    bot = create_bot()
     try:
         async with bot:
             await bot.start(get_discord_token())

@@ -3,8 +3,8 @@ import logging
 
 from dotenv import load_dotenv
 
-from bot import CustomBot, sync_commands
-from config import get_discord_token, setup_logging
+from infrastructure.config import get_discord_token, setup_logging
+from presentation.bot import create_bot, sync_commands
 
 load_dotenv()
 
@@ -13,7 +13,7 @@ logger = logging.getLogger("Update")
 
 async def main() -> None:
     """Register slash command changes with Discord, then exit."""
-    bot = CustomBot(auto_sync=False)
+    bot = create_bot(auto_sync=False)
 
     @bot.listen()
     async def on_ready():

@@ -24,7 +24,7 @@ class GeneralCog(commands.Cog):
         await interaction.response.send_message(embed=embed)
 
     def _help_embed(self, guild_id: int | None) -> discord.Embed:
-        active_model = self.bot.effective_model(guild_id)
+        active_model = self.bot.model_service.effective_model(guild_id)
         embed = discord.Embed(
             title="Bot Help & Commands",
             description=(
@@ -60,7 +60,7 @@ class GeneralCog(commands.Cog):
         embed.add_field(
             name="Currently Active",
             value=f"• Model: **`{active_model}`**\n"
-                  f"• Chat API: {'connected' if self.bot.llm.enabled else 'not configured (built-in replies disabled)'}",
+                  f"• Chat API: {'connected' if self.bot.chat_service.provider.enabled else 'not configured (built-in replies disabled)'}",
             inline=False,
         )
         embed.set_footer(text="Tip: model settings are per-server and reset when the bot restarts.")
@@ -91,7 +91,7 @@ class GeneralCog(commands.Cog):
         embed.add_field(name="Uptime", value=uptime_str, inline=True)
         embed.add_field(name="Python Version", value="3.12", inline=True)
         embed.add_field(name="discord.py", value=discord.__version__, inline=True)
-        embed.add_field(name="Active Model", value=f"`{self.bot.effective_model(interaction.guild_id)}`", inline=True)
+        embed.add_field(name="Active Model", value=f"`{self.bot.model_service.effective_model(interaction.guild_id)}`", inline=True)
 
         if self.bot.user.avatar:
             embed.set_thumbnail(url=self.bot.user.avatar.url)

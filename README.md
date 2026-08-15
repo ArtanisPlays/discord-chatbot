@@ -100,17 +100,31 @@ Chatbot/
 ├── main.py                # Entry point: logging, token check, starts the bot
 ├── start.py               # Run the bot (same as main.py)
 ├── update.py              # Register/sync slash command changes, then exit
-├── config.py              # Shared config: logging setup, token & dev guild helpers
-├── bot.py                 # CustomBot: intents, shared LLM client, guild model state
 ├── requirements.txt       # Python dependencies (discord.py, python-dotenv, aiohttp)
 ├── README.md              # Setup and usage documentation
-├── services/
-│   └── llm_client.py      # Async chat API client (OpenAI-compatible, SSE streaming)
-└── cogs/
-    ├── chat.py            # @mentions, DMs, and /chat (AI replies only)
-    ├── general.py         # Slash commands: /ping, /help, /about
-    └── models.py          # /model show, list, set, reset
+│
+├── domain/                # Domain layer: pure business objects & contracts (no deps)
+│   ├── models.py          # ChatMessage, Conversation
+│   └── ports.py           # LLMProvider, ConversationStore (Protocols)
+├── application/           # Application layer: use cases / services
+│   ├── chat_service.py    # ChatService: one turn + conversation memory
+│   └── model_service.py   # ModelService: model list cache + per-guild overrides
+├── infrastructure/        # Infrastructure layer: adapters & I/O
+│   ├── config.py          # Env config: logging setup, token & dev guild helpers
+│   ├── llm_client.py      # LLMClient: OpenAI-compatible chat API (SSE streaming)
+│   └── conversation_store.py  # MemoryConversationStore: in-memory per-channel memory
+└── presentation/          # Presentation layer: Discord interface
+    ├── bot.py             # create_bot (composition root), CustomBot, cog loading/sync
+    ├── utils.py           # split_message (Discord 2000-char safe chunking)
+    └── cogs/
+        ├── chat_cog.py    # @mentions, DMs, /chat, !chat, /clear
+        ├── general_cog.py # /ping, /help, /about
+        └── models_cog.py  # /model show, list, set, reset
 ```
+
+### Layered architecture
+
+Dependencies flow one way: `presentation -> application -> domain` and `infrastructure -> domain`. The presentation layer talks to the domain through application services (`ChatService`, `ModelService`), and adapters in `infrastructure` implement the `domain.ports` contracts (`LLMProvider`, `ConversationStore`), so swapping the LLM API or the memory store never touches the cogs.
 
 ---
 
